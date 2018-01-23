@@ -141,10 +141,21 @@ void ReplicatedMergeTreeBlockOutputStream::write(const Block & block)
             LOG_DEBUG(log, "Wrote block with " << block.rows() << " rows");
         }
 
-        commitPart(zookeeper, part, block_id);
 
-        if (auto part_log = storage.context.getPartLog(part->storage.getDatabaseName(), part->storage.getTableName()))
-            part_log->addNewPart(*part, watch.elapsed());
+
+        try
+        {
+            commitPart(zookeeper, part, block_id);
+
+            /// Set an error code if the block is duplicate
+            int error = (deduplicate && last_block_is_duplicate) ? ErrorCodes::DUPLICATE_DATA_PART : 0;
+            PartLog::addNewPartToTheLog(storage.context, *part, watch.elapsed(), ExecutionStatus(error));
+        }
+        catch (...)
+        {
+            PartLog::addNewPartToTheLog(storage.context, *part, watch.elapsed(), ExecutionStatus::fromCurrentException(__PRETTY_FUNCTION__));
+            throw;
+        }
     }
 }
 
@@ -163,10 +174,16 @@ void ReplicatedMergeTreeBlockOutputStream::writeExistingPart(MergeTreeData::Muta
 
     Stopwatch watch;
 
-    commitPart(zookeeper, part, "");
-
-    if (auto part_log = storage.context.getPartLog(part->storage.getDatabaseName(), part->storage.getTableName()))
-        part_log->addNewPart(*part, watch.elapsed());
+    try
+    {
+        commitPart(zookeeper, part, "");
+        PartLog::addNewPartToTheLog(storage.context, *part, watch.elapsed());
+    }
+    catch (...)
+    {
+        PartLog::addNewPartToTheLog(storage.context, *part, watch.elapsed(), ExecutionStatus::fromCurrentException(__PRETTY_FUNCTION__));
+        throw;
+    }
 }
 
 

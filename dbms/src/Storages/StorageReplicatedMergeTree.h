@@ -342,6 +342,10 @@ private:
 
     void executeDropRange(const LogEntry & entry);
 
+    void tryExecuteMerge(const LogEntry & entry, bool & do_fetch);
+
+    bool executeFetch(const LogEntry & entry);
+
     void executeClearColumnInPartition(const LogEntry & entry);
 
     /** Updates the queue.
